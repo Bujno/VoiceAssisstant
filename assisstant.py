@@ -6,13 +6,14 @@ from googleapiclient.discovery import build
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 import os
-import time
+import pytz
 import playsound
 import speech_recognition as sr
 from gtts import gTTS
 
 SCOPES = ['https://www.googleapis.com/auth/calendar.readonly']
-
+MONTHS = ["january", "february", "march", "april", "may", "june","july", "august", "september","october", "november", "december"]
+DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
 
 def speak(text):
     '''
@@ -70,15 +71,17 @@ def authenticate_google():
     return service
 
 
-def get_events(n, service):
+def get_events(day, service):
     '''
     Get the n amount of events that appear next in our calendar
     '''
-    now = datetime.datetime.utcnow().isoformat() + 'Z' # 'Z' indicates UTC time
-    print(f'Getting the upcoming {n} events')
-    events_result = service.events().list(calendarId='primary', timeMin=now,
-                                        maxResults=n, singleEvents=True,
-                                        orderBy='startTime').execute()
+    date = (datetime.datetime.combine(day, datetime.datetime.min.time())).astimezone(pytz.UTC)
+    end = (datetime.datetime.combine(day, datetime.datetime.max.time())).astimezone(pytz.UTC)
+    events_result = service.events().list(calendarId='primary', 
+                                          timeMin=date.isoformat(), 
+                                          timeMax=end.isoformat(),
+                                          singleEvents=True,
+                                          orderBy='startTime').execute()
     events = events_result.get('items', [])
 
     if not events:
@@ -88,5 +91,50 @@ def get_events(n, service):
         print(start, event['summary'])
 
 
-service = authenticate_google()
-get_events(2, service)
+def get_date(text):
+    '''
+    Parse the text passed in parameter and look for a month and/or a day.
+    '''
+    text = text.lower()
+    today = datetime.date.today()
+
+    if text.count("today") > 0:
+        return today
+
+    day = -1
+    day_of_week = -1
+    month = -1
+    year = today.year
+
+    for word in text.split():
+        if word in MONTHS:
+            month = MONTHS.index(word) + 1
+        elif word in DAYS:
+            day_of_week = DAYS.index(word)
+        elif word.isdigit():
+            day = int(word)
+
+    if month < today.month and month != -1:
+        year = year+1
+
+    if month == -1 and day != -1:  
+        month = today.month + 1 if day < today.day else today.month
+
+    if month == -1 and day == -1 and day_of_week != -1:
+        current_day_of_week = today.weekday()
+        dif = day_of_week - current_day_of_week
+
+        if dif < 0:
+            dif += 7
+            if text.count("next") >= 1:
+                dif += 7
+
+        return today + datetime.timedelta(dif)
+
+    if day != -1:  
+        return datetime.date(month=month, day=day, year=year)
+    
+    
+SERVICE = authenticate_google()
+text = get_audio()
+get_events(get_date(text), SERVICE)
