@@ -66,9 +66,7 @@ def authenticate_google():
         with open('token.pickle', 'wb') as token:
             pickle.dump(creds, token)
 
-    service = build('calendar', 'v3', credentials=creds)
-
-    return service
+    return build('calendar', 'v3', credentials=creds)
 
 
 def get_events(day, service):
@@ -85,10 +83,19 @@ def get_events(day, service):
     events = events_result.get('items', [])
 
     if not events:
-        print('No upcoming events found.')
-    for event in events:
-        start = event['start'].get('dateTime', event['start'].get('date'))
-        print(start, event['summary'])
+        speak('No upcoming events found.')
+    else:
+        speak(f"You have {len(events)} events on this day.")
+        for event in events:
+            start = event['start'].get('dateTime', event['start'].get('date'))
+            print(start, event['summary'])
+            start_time = str(start.split("T")[1].split("-")[0])
+            if int(start_time.split(":")[0]) < 12:
+                start_time = start_time + "am"
+            else:
+                start_time = str(int(start_time.split(":")[0])-12)
+                start_time = start_time + "pm"
+            speak(event["summary"] + " at " + start_time)
 
 
 def get_date(text):
@@ -136,5 +143,14 @@ def get_date(text):
     
     
 SERVICE = authenticate_google()
+print("Start")
 text = get_audio()
-get_events(get_date(text), SERVICE)
+
+CALENDAR_STRS = ["what do i have", "do i have plans", "am i busy"]
+for phrase in CALENDAR_STRS:
+    if phrase in text.lower():
+        date = get_date(text)
+        if date:
+            get_events(date, SERVICE)
+        else:
+            speak("Please Try Again")
